@@ -1,0 +1,1230 @@
+<html lang="zh-CN"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>原型地址管理系统</title>
+  <!-- 引入外部资源 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <!-- 配置Tailwind主题色 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            secondary: '#4080FF',
+            light: '#E8F3FF',
+            dark: '#0E42D2',
+            'bg-light': '#F0F7FF', // 保留您修改的背景色
+            //'project-header': '#E6F0FF', // 保留您修改的项目标题背景色
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <!-- 自定义工具类 -->
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .card-shadow {
+        box-shadow: 0 4px 12px rgba(22, 93, 255, 0.08);
+      }
+      .hover-lift {
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(22, 93, 255, 0.12);
+      }
+      .animate-fadeIn {
+        animation: fadeIn 0.3s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .line-clamp-1 {
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .loading-spinner {
+        border-top-color: #165DFF;
+        animation: spinner 0.6s linear infinite;
+      }
+      @keyframes spinner {
+        to { transform: rotate(360deg); }
+      }
+      .btn-icon {
+        @apply p-1.5 rounded-full hover:bg-gray-100 transition-colors;
+      }
+      .toast-enter {
+        animation: toastIn 0.3s ease forwards;
+      }
+      .toast-exit {
+        animation: toastOut 0.3s ease forwards;
+      }
+      @keyframes toastIn {
+        from { transform: translateY(-20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes toastOut {
+        from { transform: translateY(0); opacity: 1; }
+        to { transform: translateY(-20px); opacity: 0; }
+      }
+    }
+  </style>
+</head>
+<body class="bg-bg-light font-sans text-gray-800 min-h-screen">
+  <!-- 顶部导航栏 -->
+  <header class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <i class="fa fa-database text-primary text-2xl"></i>
+        <h1 class="text-xl font-bold text-primary">原型地址管理系统</h1>
+      </div>
+      <div class="flex space-x-3">
+        <button id="importBtn" class="flex items-center space-x-1 px-3 py-2 bg-white border border-primary text-primary rounded-md hover:bg-light transition-colors">
+          <i class="fa fa-upload"></i>
+          <span>导入</span>
+        </button>
+        <button id="exportBtn" class="flex items-center space-x-1 px-3 py-2 bg-white border border-primary text-primary rounded-md hover:bg-light transition-colors">
+          <i class="fa fa-download"></i>
+          <span>导出</span>
+        </button>
+        <button id="addProjectBtn" class="flex items-center space-x-1 px-3 py-2 bg-primary text-white rounded-md hover:bg-dark transition-colors">
+          <i class="fa fa-plus"></i>
+          <span>新建项目</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 导入进度提示 -->
+  <div id="importProgress" class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-4 z-50 hidden animate-fadeIn">
+    <div class="flex items-center space-x-3">
+      <div class="w-6 h-6 border-2 border-gray-300 border-t-primary rounded-full loading-spinner"></div>
+      <p class="text-gray-700">正在导入数据，请稍候...</p>
+    </div>
+  </div>
+
+  <!-- Toast通知容器 -->
+  <div id="toastContainer" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50"></div>
+
+  <main class="container mx-auto px-4 py-8">
+    <!-- 搜索栏 -->
+    <div class="max-w-2xl mx-auto mb-8">
+      <div class="relative">
+        <input type="text" id="searchInput" placeholder="搜索项目描述或版本描述..." class="w-full px-5 py-3 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all bg-white">
+        <i class="fa fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+      </div>
+    </div>
+
+    <!-- 项目列表 -->
+    <div id="projectList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <!-- 项目卡片将通过JavaScript动态生成 -->
+    </div>
+
+    <!-- 空状态提示 -->
+    <div id="emptyState" class="text-center py-16 hidden">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-light text-primary mb-4">
+        <i class="fa fa-folder-open-o text-2xl"></i>
+      </div>
+      <h3 class="text-lg font-medium text-gray-700 mb-2">暂无项目</h3>
+      <p class="text-gray-500 mb-6">点击"新建项目"按钮开始添加你的第一个项目</p>
+      <button id="emptyAddBtn" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-dark transition-colors">
+        新建项目
+      </button>
+    </div>
+  </main>
+
+  <!-- 项目详情模态框 -->
+  <div id="projectModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-fadeIn">
+      <div class="p-5 border-b flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <h2 id="modalProjectTitle" class="text-xl font-bold text-gray-800"></h2>
+          <div class="flex space-x-1">
+            <button id="editProjectBtn" class="btn-icon text-gray-500 hover:text-primary" title="编辑项目">
+              <i class="fa fa-pencil"></i>
+            </button>
+            <button id="deleteProjectBtn" class="btn-icon text-gray-500 hover:text-red-500" title="删除项目">
+              <i class="fa fa-trash"></i>
+            </button>
+          </div>
+        </div>
+        <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700">
+          <i class="fa fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <div class="p-5 overflow-y-auto flex-grow">
+        <div class="mb-6">
+          <h3 class="text-sm font-medium text-gray-500 mb-1">项目描述</h3>
+          <p id="modalProjectDesc" class="text-gray-700 line-clamp-1"></p>
+        </div>
+        
+        <div class="mb-6">
+          <h3 class="text-sm font-medium text-gray-500 mb-1">项目地址</h3>
+          <p id="modalProjectUrl" class="text-primary hover:underline break-all"></p>
+        </div>
+        
+        <div class="mb-6">
+          <h3 class="text-sm font-medium text-gray-500 mb-1">测试服地址</h3>
+          <p id="modalProjectTestUrl" class="text-primary hover:underline break-all"></p>
+        </div>
+        
+        <div class="border-t pt-5">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-medium">版本列表</h3>
+            <button id="addVersionBtn" class="text-sm px-3 py-1 bg-primary text-white rounded hover:bg-dark transition-colors">
+              <i class="fa fa-plus mr-1"></i>添加版本
+            </button>
+          </div>
+          
+          <div id="versionList" class="space-y-3">
+            <!-- 版本项将通过JavaScript动态生成 -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加/编辑项目模态框 -->
+  <div id="editProjectModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-lg w-full max-w-md p-6 animate-fadeIn">
+      <h2 id="editProjectModalTitle" class="text-xl font-bold text-gray-800 mb-4">新建项目</h2>
+      
+      <form id="projectForm">
+        <input type="hidden" id="projectId">
+        
+        <div class="mb-4">
+          <label for="projectName" class="block text-sm font-medium text-gray-700 mb-1">
+            项目名称 <span class="text-red-500">*</span>
+          </label>
+          <input type="text" id="projectName" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" required="">
+          <p id="projectNameError" class="text-red-500 text-xs mt-1 hidden">请输入项目名称</p>
+        </div>
+        
+        <div class="mb-4">
+          <label for="projectDescription" class="block text-sm font-medium text-gray-700 mb-1">项目描述</label>
+          <textarea id="projectDescription" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"></textarea>
+        </div>
+        
+        <div class="mb-4">
+          <label for="projectUrl" class="block text-sm font-medium text-gray-700 mb-1">项目地址</label>
+          <input type="url" id="projectUrl" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
+        </div>
+        
+        <div class="mb-6">
+          <label for="projectTestUrl" class="block text-sm font-medium text-gray-700 mb-1">测试服地址</label>
+          <input type="url" id="projectTestUrl" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
+        </div>
+        
+        <div class="flex justify-end space-x-3">
+          <button type="button" id="cancelProjectBtn" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
+            取消
+          </button>
+          <button type="button" id="submitProjectBtn" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-dark transition-colors">
+            保存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 添加/编辑版本模态框 -->
+  <div id="editVersionModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-lg w-full max-w-md p-6 animate-fadeIn">
+      <h2 id="editVersionModalTitle" class="text-xl font-bold text-gray-800 mb-4">新建版本</h2>
+      
+      <form id="versionForm">
+        <input type="hidden" id="versionId">
+        <input type="hidden" id="versionProjectId">
+        
+        <div class="mb-4">
+          <label for="versionName" class="block text-sm font-medium text-gray-700 mb-1">
+            版本名称 <span class="text-red-500">*</span>
+          </label>
+          <input type="text" id="versionName" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" required="">
+          <p id="versionNameError" class="text-red-500 text-xs mt-1 hidden">请输入版本名称</p>
+        </div>
+        
+        <div class="mb-4">
+          <label for="versionDescription" class="block text-sm font-medium text-gray-700 mb-1">版本描述</label>
+          <textarea id="versionDescription" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"></textarea>
+        </div>
+        
+        <div class="mb-6">
+          <label for="versionUrl" class="block text-sm font-medium text-gray-700 mb-1">
+            原型地址 <span class="text-red-500">*</span>
+          </label>
+          <input type="url" id="versionUrl" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" required="">
+          <p id="versionUrlError" class="text-red-500 text-xs mt-1 hidden">请输入原型地址</p>
+        </div>
+        
+        <div class="flex justify-end space-x-3">
+          <button type="button" id="cancelVersionBtn" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">取消</button>
+          <button type="button" id="submitVersionBtn" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-dark transition-colors">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 确认删除模态框 -->
+  <div id="confirmDeleteModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-lg w-full max-w-md p-6 animate-fadeIn">
+      <h2 class="text-xl font-bold text-gray-800 mb-2">确认删除</h2>
+      <p id="deleteMessage" class="text-gray-600 mb-6">你确定要删除这个项目吗？此操作不可撤销。</p>
+      
+      <div class="flex justify-end space-x-3">
+        <button id="cancelDeleteBtn" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
+          取消
+        </button>
+        <button id="confirmDeleteBtn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
+          确认删除
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 数据模型
+    let projects = [];
+    let currentProjectId = null;
+    let currentVersionId = null;
+    let deleteType = ''; // 'project' 或 'version'
+
+    // DOM 元素
+    const projectListEl = document.getElementById('projectList');
+    const emptyStateEl = document.getElementById('emptyState');
+    const searchInputEl = document.getElementById('searchInput');
+    const importProgressEl = document.getElementById('importProgress');
+    const toastContainerEl = document.getElementById('toastContainer');
+    
+    // 模态框元素
+    const projectModalEl = document.getElementById('projectModal');
+    const editProjectModalEl = document.getElementById('editProjectModal');
+    const editVersionModalEl = document.getElementById('editVersionModal');
+    const confirmDeleteModalEl = document.getElementById('confirmDeleteModal');
+
+    // 初始化
+    function init() {
+      loadData();
+      renderProjects();
+      setupEventListeners();
+      console.log('系统初始化完成');
+    }
+
+    // 显示Toast通知
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `px-4 py-3 rounded-md shadow-lg mb-2 toast-enter ${
+        type === 'success' ? 'bg-green-50 text-green-800' : 
+        type === 'error' ? 'bg-red-50 text-red-800' : 
+        'bg-blue-50 text-blue-800'
+      }`;
+      
+      toast.innerHTML = `
+        <div class="flex items-center">
+          <i class="fa ${
+            type === 'success' ? 'fa-check-circle' : 
+            type === 'error' ? 'fa-exclamation-circle' : 
+            'fa-info-circle'
+          } mr-2"></i>
+          <span>${message}</span>
+        </div>
+      `;
+      
+      toastContainerEl.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.classList.remove('toast-enter');
+        toast.classList.add('toast-exit');
+        
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }, 3000);
+    }
+
+    // 从本地存储加载数据
+    function loadData() {
+      try {
+        const savedProjects = localStorage.getItem('prototypeProjects');
+        if (savedProjects) {
+          // 加载数据时移除版本的testUrl属性（如果存在）
+          projects = JSON.parse(savedProjects).map(project => ({
+            ...project,
+            versions: project.versions.map(version => {
+              const { testUrl, ...versionWithoutTestUrl } = version;
+              return versionWithoutTestUrl;
+            })
+          }));
+          console.log('从本地存储加载了', projects.length, '个项目');
+        } else {
+          // 示例数据 - 版本不再包含测试服地址
+          projects = [
+            {
+              id: '1',
+              name: '电商平台',
+              description: '在线购物平台原型设计，包含商品展示、购物车、结算等完整功能模块',
+              url: 'https://example.com/ecommerce',
+              testUrl: 'https://test.example.com/ecommerce',
+              versions: [
+                {
+                  id: 'v1',
+                  name: 'V1.0',
+                  description: '初始版本，包含基础购物功能',
+                  url: 'https://example.com/ecommerce/v1'
+                },
+                {
+                  id: 'v2',
+                  name: 'V2.0',
+                  description: '增加了会员系统和优惠券功能',
+                  url: 'https://example.com/ecommerce/v2'
+                }
+              ]
+            },
+            {
+              id: '2',
+              name: '教学云',
+              description: '在线教育平台，包含课程管理、学习跟踪等功能',
+              url: 'https://example.com/teaching-cloud',
+              testUrl: 'https://test.example.com/teaching-cloud',
+              versions: [
+                {
+                  id: 'v1',
+                  name: 'V1.0',
+                  description: '初始版本，包含在线课程和学习管理功能',
+                  url: 'https://example.com/teaching-cloud/v1'
+                }
+              ]
+            }
+          ];
+          saveData();
+        }
+      } catch (error) {
+        console.error('加载数据失败:', error);
+        projects = [];
+      }
+    }
+
+    // 保存数据到本地存储
+    function saveData() {
+      try {
+        localStorage.setItem('prototypeProjects', JSON.stringify(projects));
+        console.log('数据已保存到本地存储');
+      } catch (error) {
+        console.error('保存数据失败:', error);
+        showToast('保存失败，请检查浏览器存储权限', 'error');
+      }
+    }
+
+    // 渲染项目列表
+    function renderProjects(searchTerm = '') {
+      projectListEl.innerHTML = '';
+      
+      const filteredProjects = searchTerm 
+        ? projects.filter(project => 
+            project.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            project.versions.some(version => 
+              version.description.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+          )
+        : projects;
+      
+      if (filteredProjects.length === 0) {
+        emptyStateEl.classList.remove('hidden');
+        return;
+      }
+      
+      emptyStateEl.classList.add('hidden');
+      
+      filteredProjects.forEach(project => {
+        const projectCard = createProjectCard(project);
+        projectListEl.appendChild(projectCard);
+      });
+    }
+
+    // 创建项目卡片
+    function createProjectCard(project) {
+      const card = document.createElement('div');
+      card.className = 'bg-white rounded-lg overflow-hidden card-shadow hover-lift transition-all';
+      card.setAttribute('data-id', project.id);
+      
+      const recentVersions = [...project.versions].slice(-3);
+      
+      let versionsHtml = '';
+      recentVersions.forEach(version => {
+        let desc = version.description || '无描述';
+        
+        versionsHtml += `
+          <div class="flex items-center justify-between py-2 border-b last:border-0 border-gray-100">
+            <div>
+              <span class="text-sm font-medium">${version.name}</span>
+              <div class="text-xs text-gray-500 line-clamp-1 mt-0.5">${desc}</div>
+            </div>
+            <div class="flex space-x-1">
+              <a href="${version.url}" target="_blank" class="text-primary hover:text-primary/80 p-1.5" title="访问正式地址">
+                <i class="fa fa-external-link"></i>
+              </a>
+            </div>
+          </div>
+        `;
+      });
+      
+      if (project.versions.length > 3) {
+        versionsHtml += `
+          <div class="py-2 text-center text-xs text-gray-500">
+            还有 ${project.versions.length - 3} 个版本...
+          </div>
+        `;
+      }
+      
+      card.innerHTML = `
+        <!-- 项目标题区域使用您设置的浅蓝色背景 -->
+        <div class="p-4 border-b bg-project-header">
+          <div class="flex justify-between items-center">
+            <h3 class="font-bold text-gray-800 mb-1">${project.name}</h3>
+            <div class="flex space-x-1">
+              <a href="${project.url}" target="_blank" class="text-primary hover:text-primary/80 p-1.5" title="访问正式地址">
+                <i class="fa fa-external-link"></i>
+              </a>
+              ${project.testUrl ? `
+                <a href="${project.testUrl}" target="_blank" class="text-orange-500 hover:text-orange-600 p-1.5" title="访问测试地址">
+                  <i class="fa fa-flask"></i>
+                </a>
+              ` : ''}
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 line-clamp-1">${project.description || '无描述'}</p>
+        </div>
+        <div class="p-3">
+          <div class="text-xs text-gray-500 mb-2">最近版本</div>
+          <div class="text-xs">
+            ${versionsHtml || '<div class="text-center text-gray-500 py-2">无版本数据</div>'}
+          </div>
+        </div>
+        <div class="p-3 bg-gray-50">
+          <button class="add-version-btn w-full py-2 text-primary text-sm border border-primary rounded hover:bg-light transition-colors">
+            <i class="fa fa-plus mr-1"></i>添加版本
+          </button>
+        </div>
+      `;
+      
+      const addVersionBtn = card.querySelector('.add-version-btn');
+      
+      card.addEventListener('click', (e) => {
+        if (!e.target.closest('.add-version-btn') && !e.target.closest('a')) {
+          openProjectDetail(project.id);
+        }
+      });
+      
+      addVersionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditVersionModal(project.id);
+      });
+      
+      return card;
+    }
+
+    // 打开项目详情
+    function openProjectDetail(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      
+      currentProjectId = projectId;
+      
+      document.getElementById('modalProjectTitle').textContent = project.name;
+      document.getElementById('modalProjectDesc').textContent = project.description || '无描述';
+      
+      const projectUrlEl = document.getElementById('modalProjectUrl');
+      if (project.url) {
+        projectUrlEl.innerHTML = `<a href="${project.url}" target="_blank">${project.url}</a>`;
+      } else {
+        projectUrlEl.textContent = '未设置';
+      }
+      
+      const projectTestUrlEl = document.getElementById('modalProjectTestUrl');
+      if (project.testUrl) {
+        projectTestUrlEl.innerHTML = `<a href="${project.testUrl}" target="_blank">${project.testUrl}</a>`;
+      } else {
+        projectTestUrlEl.textContent = '未设置';
+      }
+      
+      renderVersions(projectId);
+      projectModalEl.classList.remove('hidden');
+    }
+
+    // 渲染版本列表
+    function renderVersions(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      
+      const versionListEl = document.getElementById('versionList');
+      versionListEl.innerHTML = '';
+      
+      if (project.versions.length === 0) {
+        versionListEl.innerHTML = `
+          <div class="text-center py-6 text-gray-500">
+            该项目暂无版本数据，点击"添加版本"按钮创建第一个版本
+          </div>
+        `;
+        return;
+      }
+      
+      project.versions.forEach(version => {
+        const versionEl = document.createElement('div');
+        versionEl.className = 'bg-gray-50 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between';
+        
+        versionEl.innerHTML = `
+          <div class="mb-3 md:mb-0">
+            <h4 class="font-medium text-gray-800">${version.name}</h4>
+            <p class="text-sm text-gray-600 mt-1">${version.description || '无描述'}</p>
+            <div class="mt-2 space-y-1">
+              <div class="flex items-center">
+                <span class="text-xs text-gray-500 mr-2">正式地址:</span>
+                <a href="${version.url}" target="_blank" class="text-primary text-sm hover:underline inline-flex items-center">
+                  ${version.url} <i class="fa fa-external-link ml-1 text-xs"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+          <div class="flex space-x-2">
+            <button class="edit-version-btn p-1.5 text-gray-500 hover:text-primary" data-id="${version.id}" title="编辑">
+              <i class="fa fa-pencil"></i>
+            </button>
+            <button class="delete-version-btn p-1.5 text-gray-500 hover:text-red-500" data-id="${version.id}" title="删除">
+              <i class="fa fa-trash"></i>
+            </button>
+          </div>
+        `;
+        
+        versionListEl.appendChild(versionEl);
+      });
+      
+      document.querySelectorAll('.edit-version-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const versionId = e.currentTarget.getAttribute('data-id');
+          openEditVersionModal(projectId, versionId);
+        });
+      });
+      
+      document.querySelectorAll('.delete-version-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const versionId = e.currentTarget.getAttribute('data-id');
+          openConfirmDeleteModal('version', projectId, versionId);
+        });
+      });
+    }
+
+    // 打开添加/编辑项目模态框
+    function openEditProjectModal(projectId = null) {
+      const modalTitleEl = document.getElementById('editProjectModalTitle');
+      
+      document.getElementById('projectForm').reset();
+      document.getElementById('projectId').value = '';
+      document.getElementById('projectNameError').classList.add('hidden');
+      
+      if (projectId) {
+        modalTitleEl.textContent = '编辑项目';
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+          document.getElementById('projectId').value = project.id;
+          document.getElementById('projectName').value = project.name;
+          document.getElementById('projectDescription').value = project.description || '';
+          document.getElementById('projectUrl').value = project.url || '';
+          document.getElementById('projectTestUrl').value = project.testUrl || '';
+        }
+      } else {
+        modalTitleEl.textContent = '新建项目';
+      }
+      
+      editProjectModalEl.classList.remove('hidden');
+    }
+
+    // 打开添加/编辑版本模态框
+    function openEditVersionModal(projectId, versionId = null) {
+      const modalTitleEl = document.getElementById('editVersionModalTitle');
+      
+      document.getElementById('versionForm').reset();
+      document.getElementById('versionId').value = '';
+      document.getElementById('versionProjectId').value = projectId;
+      document.getElementById('versionNameError').classList.add('hidden');
+      document.getElementById('versionUrlError').classList.add('hidden');
+      
+      if (versionId) {
+        modalTitleEl.textContent = '编辑版本';
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+          const version = project.versions.find(v => v.id === versionId);
+          if (version) {
+            document.getElementById('versionId').value = version.id;
+            document.getElementById('versionName').value = version.name;
+            document.getElementById('versionDescription').value = version.description || '';
+            document.getElementById('versionUrl').value = version.url || '';
+          }
+        }
+      } else {
+        modalTitleEl.textContent = '新建版本';
+      }
+      
+      projectModalEl.classList.add('hidden');
+      editProjectModalEl.classList.add('hidden');
+      editVersionModalEl.classList.remove('hidden');
+    }
+
+    // 打开确认删除模态框
+    function openConfirmDeleteModal(type, projectId, itemId) {
+      deleteType = type;
+      currentProjectId = projectId;
+      
+      if (type === 'project') {
+        document.getElementById('deleteMessage').textContent = '你确定要删除这个项目吗？此操作将删除所有相关版本，且不可撤销。';
+        currentProjectId = itemId;
+      } else if (type === 'version') {
+        document.getElementById('deleteMessage').textContent = '你确定要删除这个版本吗？此操作不可撤销。';
+        currentVersionId = itemId;
+      }
+      
+      confirmDeleteModalEl.classList.remove('hidden');
+    }
+
+    // 保存项目
+    function saveProject() {
+      document.getElementById('projectNameError').classList.add('hidden');
+      
+      try {
+        const id = document.getElementById('projectId').value;
+        const name = document.getElementById('projectName').value.trim();
+        const description = document.getElementById('projectDescription').value.trim();
+        const url = document.getElementById('projectUrl').value.trim();
+        const testUrl = document.getElementById('projectTestUrl').value.trim();
+        
+        if (!name) {
+          document.getElementById('projectNameError').classList.remove('hidden');
+          document.getElementById('projectName').focus();
+          return false;
+        }
+        
+        if (id) {
+          const index = projects.findIndex(p => p.id === id);
+          if (index !== -1) {
+            projects[index] = {
+              ...projects[index],
+              name,
+              description,
+              url,
+              testUrl
+            };
+            showToast('项目更新成功');
+          } else {
+            showToast('未找到该项目', 'error');
+            return false;
+          }
+        } else {
+          const newProject = {
+            id: Date.now().toString(),
+            name,
+            description,
+            url,
+            testUrl,
+            versions: []
+          };
+          projects.push(newProject);
+          showToast('新项目创建成功');
+        }
+        
+        saveData();
+        renderProjects(searchInputEl.value);
+        editProjectModalEl.classList.add('hidden');
+        return true;
+      } catch (error) {
+        console.error('保存项目失败:', error);
+        showToast('保存失败: ' + error.message, 'error');
+        return false;
+      }
+    }
+
+    // 保存版本
+    function saveVersion() {
+      document.getElementById('versionNameError').classList.add('hidden');
+      document.getElementById('versionUrlError').classList.add('hidden');
+      
+      try {
+        const id = document.getElementById('versionId').value;
+        const projectId = document.getElementById('versionProjectId').value;
+        const name = document.getElementById('versionName').value.trim();
+        const description = document.getElementById('versionDescription').value.trim();
+        const url = document.getElementById('versionUrl').value.trim();
+        
+        let isValid = true;
+        
+        if (!name) {
+          document.getElementById('versionNameError').classList.remove('hidden');
+          document.getElementById('versionName').focus();
+          isValid = false;
+        }
+        
+        if (!url) {
+          document.getElementById('versionUrlError').classList.remove('hidden');
+          if (isValid) document.getElementById('versionUrl').focus();
+          isValid = false;
+        }
+        
+        if (!isValid) return false;
+        
+        const projectIndex = projects.findIndex(p => p.id === projectId);
+        if (projectIndex === -1) {
+          showToast('未找到对应的项目', 'error');
+          return false;
+        }
+        
+        if (id) {
+          const versionIndex = projects[projectIndex].versions.findIndex(v => v.id === id);
+          if (versionIndex !== -1) {
+            projects[projectIndex].versions[versionIndex] = {
+              ...projects[projectIndex].versions[versionIndex],
+              name,
+              description,
+              url
+            };
+            showToast('版本更新成功');
+          } else {
+            showToast('未找到该版本', 'error');
+            return false;
+          }
+        } else {
+          const newVersion = {
+            id: `v${Date.now().toString()}`,
+            name,
+            description,
+            url
+          };
+          projects[projectIndex].versions.push(newVersion);
+          showToast('新版本创建成功');
+        }
+        
+        saveData();
+        editVersionModalEl.classList.add('hidden');
+        renderProjects(searchInputEl.value);
+        return true;
+      } catch (error) {
+        console.error('保存版本失败:', error);
+        showToast('保存失败: ' + error.message, 'error');
+        return false;
+      }
+    }
+
+    // 删除项目
+    function deleteProject(projectId) {
+      const index = projects.findIndex(p => p.id === projectId);
+      if (index !== -1) {
+        projects.splice(index, 1);
+        saveData();
+        renderProjects(searchInputEl.value);
+        showToast('项目已删除');
+        return true;
+      }
+      showToast('删除失败，未找到该项目', 'error');
+      return false;
+    }
+
+    // 删除版本
+    function deleteVersion(projectId, versionId) {
+      const projectIndex = projects.findIndex(p => p.id === projectId);
+      if (projectIndex === -1) {
+        showToast('删除失败，未找到该项目', 'error');
+        return false;
+      }
+      
+      const versionIndex = projects[projectIndex].versions.findIndex(v => v.id === versionId);
+      if (versionIndex !== -1) {
+        projects[projectIndex].versions.splice(versionIndex, 1);
+        saveData();
+        showToast('版本已删除');
+        return true;
+      }
+      
+      showToast('删除失败，未找到该版本', 'error');
+      return false;
+    }
+
+    // 导出数据为Excel
+    function exportToExcel() {
+      try {
+        const exportData = [];
+        exportData.push([
+          '项目ID', '项目名称', '项目描述', '项目地址', '测试服地址',
+          '版本ID', '版本名称', '版本描述', '版本地址'
+        ]);
+        
+        projects.forEach(project => {
+          if (project.versions.length === 0) {
+            exportData.push([
+              project.id, project.name, project.description || '', 
+              project.url || '', project.testUrl || '',
+              '', '', '', ''
+            ]);
+          } else {
+            project.versions.forEach((version, index) => {
+              exportData.push([
+                index === 0 ? project.id : '',
+                index === 0 ? project.name : '',
+                index === 0 ? (project.description || '') : '',
+                index === 0 ? (project.url || '') : '',
+                index === 0 ? (project.testUrl || '') : '',
+                version.id, version.name, version.description || '', 
+                version.url
+              ]);
+            });
+          }
+        });
+        
+        const ws = XLSX.utils.aoa_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '原型地址管理');
+        XLSX.writeFile(wb, '原型地址管理_' + new Date().toLocaleDateString() + '.xlsx');
+        showToast('导出成功');
+      } catch (error) {
+        console.error('导出失败:', error);
+        showToast('导出失败: ' + error.message, 'error');
+      }
+    }
+
+    // 从Excel导入数据
+    function importFromExcel(file) {
+      importProgressEl.classList.remove('hidden');
+      
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        try {
+          if (e.total > 10 * 1024 * 1024) {
+            showToast('文件过大，请选择10MB以下的Excel文件', 'error');
+            return;
+          }
+          
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+          
+          const header = jsonData[0];
+          if (!header || header.length < 9 || 
+              header[0] !== '项目ID' || header[1] !== '项目名称' ||
+              header[3] !== '项目地址' || header[4] !== '测试服地址' ||
+              header[5] !== '版本ID' || header[6] !== '版本名称' ||
+              header[8] !== '版本地址') {
+            showToast('导入的Excel文件格式不正确，请使用系统导出的模板', 'error');
+            return;
+          }
+          
+          // 统计信息
+          let newProjects = 0;
+          let updatedProjects = 0;
+          let newVersions = 0;
+          let updatedVersions = 0;
+          let skippedRows = 0;
+          
+          // 逐条处理数据
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            // 跳过空行
+            if (!row || row.every(cell => !cell)) {
+              skippedRows++;
+              continue;
+            }
+            
+            // 提取行数据
+            let projectId = row[0] ? row[0].toString().trim() : null;
+            const projectName = row[1] ? row[1].toString().trim() : null;
+            const projectDesc = row[2] ? row[2].toString().trim() : '';
+            const projectUrl = row[3] ? row[3].toString().trim() : '';
+            const projectTestUrl = row[4] ? row[4].toString().trim() : '';
+            
+            let versionId = row[5] ? row[5].toString().trim() : null;
+            const versionName = row[6] ? row[6].toString().trim() : null;
+            const versionDesc = row[7] ? row[7].toString().trim() : '';
+            const versionUrl = row[8] ? row[8].toString().trim() : null;
+            
+            // 验证必要的项目信息
+            if (!projectName) {
+              console.log(`跳过第${i+1}行：缺少项目名称`);
+              skippedRows++;
+              continue;
+            }
+            
+            // 自动生成项目ID（如果没有）
+            if (!projectId) {
+              projectId = 'auto_' + Date.now() + '_' + i;
+              console.log(`为项目"${projectName}"自动生成ID: ${projectId}`);
+            }
+            
+            // 检查项目是否已存在
+            let projectIndex = projects.findIndex(p => p.id === projectId);
+            let isNewProject = false;
+            
+            // 如果项目不存在，创建新项目
+            if (projectIndex === -1) {
+              projects.push({
+                id: projectId,
+                name: projectName,
+                description: projectDesc,
+                url: projectUrl,
+                testUrl: projectTestUrl,
+                versions: []
+              });
+              projectIndex = projects.length - 1;
+              newProjects++;
+              isNewProject = true;
+            } else {
+              // 如果项目存在，更新项目信息
+              projects[projectIndex].name = projectName;
+              projects[projectIndex].description = projectDesc;
+              projects[projectIndex].url = projectUrl;
+              projects[projectIndex].testUrl = projectTestUrl;
+              updatedProjects++;
+            }
+            
+            // 处理版本信息（如果有）
+            if (versionName && versionUrl) {
+              // 自动生成版本ID（如果没有）
+              if (!versionId) {
+                versionId = 'v_auto_' + Date.now() + '_' + i;
+                console.log(`为版本"${versionName}"自动生成ID: ${versionId}`);
+              }
+              
+              // 检查版本是否已存在
+              const versionIndex = projects[projectIndex].versions.findIndex(v => v.id === versionId);
+              
+              if (versionIndex === -1) {
+                // 版本不存在，添加新版本
+                projects[projectIndex].versions.push({
+                  id: versionId,
+                  name: versionName,
+                  description: versionDesc,
+                  url: versionUrl
+                });
+                newVersions++;
+              } else {
+                // 版本存在，更新版本信息
+                projects[projectIndex].versions[versionIndex] = {
+                  id: versionId,
+                  name: versionName,
+                  description: versionDesc,
+                  url: versionUrl
+                };
+                updatedVersions++;
+              }
+            }
+          }
+          
+          // 保存数据并刷新界面
+          saveData();
+          renderProjects(searchInputEl.value);
+          
+          // 显示导入结果
+          showToast(`导入完成！新增项目: ${newProjects}个, 更新项目: ${updatedProjects}个, 新增版本: ${newVersions}个, 更新版本: ${updatedVersions}个, 跳过行: ${skippedRows}行`);
+          
+        } catch (error) {
+          console.error('导入失败:', error);
+          showToast('导入失败: ' + error.message, 'error');
+        } finally {
+          importProgressEl.classList.add('hidden');
+        }
+      };
+      
+      reader.onerror = function() {
+        console.error('文件读取失败:', reader.error);
+        showToast('文件读取失败: ' + reader.error.message, 'error');
+        importProgressEl.classList.add('hidden');
+      };
+      
+      reader.onabort = function() {
+        console.log('文件读取已中断');
+        showToast('文件读取已中断', 'error');
+        importProgressEl.classList.add('hidden');
+      };
+      
+      reader.readAsArrayBuffer(file);
+    }
+
+    // 设置事件监听器
+    function setupEventListeners() {
+      // 保存按钮事件
+      document.getElementById('submitProjectBtn').addEventListener('click', saveProject);
+      document.getElementById('submitVersionBtn').addEventListener('click', saveVersion);
+      
+      // 搜索功能
+      searchInputEl.addEventListener('input', (e) => {
+        renderProjects(e.target.value);
+      });
+      
+      // 新建项目按钮
+      const addProjectBtn = document.getElementById('addProjectBtn');
+      if (addProjectBtn) {
+        addProjectBtn.addEventListener('click', () => {
+          console.log('新建项目按钮被点击');
+          openEditProjectModal();
+        });
+      } else {
+        console.error('未找到addProjectBtn元素');
+      }
+      
+      // 空状态新建项目按钮
+      document.getElementById('emptyAddBtn').addEventListener('click', () => {
+        openEditProjectModal();
+      });
+      
+      // 关闭项目详情模态框
+      document.getElementById('closeModalBtn').addEventListener('click', () => {
+        projectModalEl.classList.add('hidden');
+      });
+      
+      // 添加版本按钮
+      document.getElementById('addVersionBtn').addEventListener('click', () => {
+        if (currentProjectId) {
+          openEditVersionModal(currentProjectId);
+        }
+      });
+      
+      // 编辑项目按钮
+      document.getElementById('editProjectBtn').addEventListener('click', () => {
+        if (currentProjectId) {
+          projectModalEl.classList.add('hidden');
+          openEditProjectModal(currentProjectId);
+        }
+      });
+      
+      // 删除项目按钮
+      document.getElementById('deleteProjectBtn').addEventListener('click', () => {
+        if (currentProjectId) {
+          projectModalEl.classList.add('hidden');
+          openConfirmDeleteModal('project', null, currentProjectId);
+        }
+      });
+      
+      // 取消项目编辑
+      document.getElementById('cancelProjectBtn').addEventListener('click', () => {
+        editProjectModalEl.classList.add('hidden');
+      });
+      
+      // 取消版本编辑
+      document.getElementById('cancelVersionBtn').addEventListener('click', () => {
+        editVersionModalEl.classList.add('hidden');
+      });
+      
+      // 取消删除
+      document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+        confirmDeleteModalEl.classList.add('hidden');
+        if (deleteType === 'version' && currentProjectId) {
+          openProjectDetail(currentProjectId);
+        }
+      });
+      
+      // 确认删除
+      document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+        if (deleteType === 'project' && currentProjectId) {
+          deleteProject(currentProjectId);
+        } else if (deleteType === 'version' && currentProjectId && currentVersionId) {
+          deleteVersion(currentProjectId, currentVersionId);
+        }
+        
+        confirmDeleteModalEl.classList.add('hidden');
+      });
+      
+      // 导出按钮
+      document.getElementById('exportBtn').addEventListener('click', exportToExcel);
+      
+      // 导入按钮
+      document.getElementById('importBtn').addEventListener('click', () => {
+        try {
+          const fileInput = document.createElement('input');
+          fileInput.type = 'file';
+          fileInput.accept = '.xlsx, .xls';
+          
+          fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+              const file = e.target.files[0];
+              const fileType = file.name.split('.').pop().toLowerCase();
+              if (fileType !== 'xlsx' && fileType !== 'xls') {
+                showToast('请选择Excel文件（.xlsx或.xls格式）', 'error');
+                return;
+              }
+              
+              importFromExcel(file);
+            }
+          });
+          
+          fileInput.click();
+        } catch (error) {
+          console.error('导入按钮点击处理失败:', error);
+          showToast('导入功能出现错误: ' + error.message, 'error');
+        }
+      });
+      
+      // 点击模态框背景关闭
+      projectModalEl.addEventListener('click', (e) => {
+        if (e.target === projectModalEl) {
+          projectModalEl.classList.add('hidden');
+        }
+      });
+      
+      editProjectModalEl.addEventListener('click', (e) => {
+        if (e.target === editProjectModalEl) {
+          editProjectModalEl.classList.add('hidden');
+        }
+      });
+      
+      editVersionModalEl.addEventListener('click', (e) => {
+        if (e.target === editVersionModalEl) {
+          editVersionModalEl.classList.add('hidden');
+        }
+      });
+      
+      confirmDeleteModalEl.addEventListener('click', (e) => {
+        if (e.target === confirmDeleteModalEl) {
+          confirmDeleteModalEl.classList.add('hidden');
+          if (deleteType === 'version' && currentProjectId) {
+            openProjectDetail(currentProjectId);
+          }
+        }
+      });
+
+      // 输入框实时验证
+      document.getElementById('projectName').addEventListener('input', () => {
+        document.getElementById('projectNameError').classList.add('hidden');
+      });
+      
+      document.getElementById('versionName').addEventListener('input', () => {
+        document.getElementById('versionNameError').classList.add('hidden');
+      });
+      
+      document.getElementById('versionUrl').addEventListener('input', () => {
+        document.getElementById('versionUrlError').classList.add('hidden');
+      });
+    }
+
+    // 确保DOM完全加载后再初始化
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body></html>
+    
